@@ -1,14 +1,20 @@
 (ns clomp.core
   (:refer-clojure :exclude [send])
-  (:use [clojure.string :only [join]])
+  (:use [clojure.string :only [join split]])
   (:require [clojure.java.io :as io])
-  (:import [java.net Socket]))
+  (:import (java.net Socket)))
 
-(def *session-id* nil)
-(def *connection* nil)
+(def ^:dynamic *session-id* nil)
+(def ^:dynamic *connection* nil)
+
+(deftype StompSocket [socket reader writer])
+
+(defn clomp [uri port]
+  (let [sock (java.net.Socket. uri port)]
+    (StompSocket. sock (io/reader sock) (io/writer sock))))
 
 (defn- send-frame [out command headers & [body]]
-  (binding [*out* (io/writer out)]
+  (binding [*out* (.writer out)]
     (println command)
     (println (join "\n" (for [[k v] headers] (str (name k) ":" v))))
     (if body (println (str "content-length:" (count body))))
@@ -19,8 +25,8 @@
 
 (defn- read-headers []
   (loop [headers {}]
-    (let [[key val] (.split (read-line) ":")]
-      (if val
+    (let [[key val] (split (read-line) #":" 2)]
+      (if (and key val)
         (recur (assoc headers (keyword key) val))
         headers))))
 
@@ -40,11 +46,17 @@
           string
           (recur (str string (char c))))))))
 
+(defn- read-command []
+  (let [command (read-line)]
+    (if (empty? command)
+      (read-command)
+      (keyword command))))
+
 (defrecord Frame [type headers body])
 
 (defn receive [in & [type]]
-  (binding [*in* (io/reader in)]
-    (let [type    (keyword (read-line))
+  (binding [*in* (.reader in)]
+    (let [type    (read-command)
           headers (read-headers)
           body    (read-body *in* (:content-length headers))
           frame   (Frame. type headers body)]
@@ -69,15 +81,3 @@
                *session-id* (get-in frame# [:headers :session])]
        (try ~@forms
             (finally (disconnect ~s))))))
-
-(defmacro outstream [s headers]
-  `(clomp.OutputStream. ~s ~headers))
-
-(defmacro instream [s]
-  `(clomp.InputStream. ~s))
-
-(defmacro writer [s headers]
-  `(io/writer (outstream ~s ~headers)))
-
-(defmacro reader [s]
-  `(io/reader (instream ~s)))

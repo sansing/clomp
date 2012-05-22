@@ -4,7 +4,7 @@
   (:import [java.net Socket]))
 
 (deftest connect-disconnect
-  (let [s (java.net.Socket. "localhost" 61613)]
+  (let [s (clomp/clomp "localhost" 61613)]
     (let [connected (clomp/connect s {:login "foo"})]
       (is (= :CONNECTED (:type connected)))
       (is (get-in connected [:headers :session]))
@@ -12,7 +12,7 @@
     (clomp/disconnect s)))
 
 (deftest simple-session
-  (let [s (java.net.Socket. "localhost" 61613)]
+  (let [s (clomp/clomp "localhost" 61613)]
     (clomp/with-connection s {:login "foo" :password "secret"}
       (is clomp/*session-id*)
       (is clomp/*connection*)
@@ -28,8 +28,8 @@
       (is (= "blah!" (:body (clomp/receive s)))))))
 
 (deftest two-clients
-  (let [s1 (java.net.Socket. "localhost" 61613)
-        s2 (java.net.Socket. "localhost" 61613)]
+  (let [s1 (clomp/clomp "localhost" 61613)
+        s2 (clomp/clomp "localhost" 61613)]
     (clomp/with-connection s1 {:login "foo" :password "secret"}
       (clomp/send s1 {:destination "/queue/a"} "zap!")
       (clomp/send s1 {:destination "/queue/a"} "baz!"))
@@ -37,21 +37,3 @@
       (clomp/subscribe s2 {:destination "/queue/a"})
       (is (= "zap!" (:body (clomp/receive s2))))
       (is (= "baz!" (:body (clomp/receive s2)))))))
-
-(deftest three-clients
-  (let [s1 (java.net.Socket. "localhost" 61613)
-        s2 (java.net.Socket. "localhost" 61613)
-        s3 (java.net.Socket. "localhost" 61613)]
-    (clomp/with-connection s1 {:login "foo" :password "secret"}
-      (clomp/send s1 {:destination "/queue/a"} "1")
-      (clomp/send s1 {:destination "/queue/a"} "2")
-      (clomp/send s1 {:destination "/queue/a"} "3")
-      (clomp/send s1 {:destination "/queue/a"} "4"))
-    (clomp/with-connection s2 {:login "baz" :password "password"}
-      (clomp/subscribe s2 {:destination "/queue/a"})
-      (is (= "1" (:body (clomp/receive s2))))
-      (is (= "2" (:body (clomp/receive s2)))))
-    (clomp/with-connection s3 {:login "baz" :password "password"}
-      (clomp/subscribe s3 {:destination "/queue/a"})
-      (is (= "3" (:body (clomp/receive s3))))
-      (is (= "4" (:body (clomp/receive s3)))))))

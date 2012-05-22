@@ -8,3 +8,7 @@ classes
 build
 clj-stomp
 hornetq-stomp
+
+#Emacs Files#
+*~
+#*#
